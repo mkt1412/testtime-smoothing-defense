@@ -15,13 +15,19 @@ import cv2
 
 
 def map_class_indices():
-    with open('label_mapping.txt') as f:
+    """
+    Map the folder names (codes) to class indices
+    :return: dictionary {key: folder name; value: index}
+    """
+    with open('synset_words.txt') as f:
         lines = f.readlines()
     class_index = {}
+    count = 0
     for line in lines:
         parts = line.split()
-        code, idx, label = parts
-        class_index[code] = int(idx)
+        code = parts[0]
+        class_index[code] = count
+        count += 1
 
     return class_index
 
