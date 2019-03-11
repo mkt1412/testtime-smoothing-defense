@@ -22,9 +22,8 @@ image = image/255
 
 # apply attack on source image
 attack = foolbox.attacks.GradientSignAttack(model)
-adv_image = attack(image, label, max_epsilon=0.5, epsilons=1)
-
-print("adv predicted class:", np.argmax(model.predictions(adv_image)), "true class:", label)
+# adv_image = attack(image, label, max_epsilon=0.5, epsilons=1)
+adv_image = attack(image, label)
 
 # convert original image to tensor
 image = torch.from_numpy(image)
@@ -37,10 +36,10 @@ adv_image = torch.unsqueeze(adv_image, 0)
 adv_image = adv_image.cuda()
 
 # predict label with original resnet18
-with torch.no_grad():
-    out_1 = np.argmax(resnet18(image).cpu())
-    out_2 = np.argmax(resnet18(adv_image).cpu())
-print(out_1, out_2)
+# with torch.no_grad():
+#     out_1 = np.argmax(resnet18(image).cpu())
+#     out_2 = np.argmax(resnet18(adv_image).cpu())
+# print(out_1, out_2)
 
 # resnet part 1: from layer 0 to layer 2
 modules = list(resnet18.children())[:3]
@@ -63,7 +62,12 @@ for p in resnet18.parameters():
 out_1st = resnet_1st(image)
 out_2nd = resnet_2nd(out_1st)
 out_3rd = resnet_3rd(out_2nd.view(out_2nd.size(0), -1))
-print(np.argmax(out_3rd.cpu().numpy()))
+prediction = np.argmax(out_3rd.cpu())
+print(prediction)
+
+
+
+
 
 
 
