@@ -14,10 +14,11 @@ import cv2
 import getpass
 
 # Set up the root directory of ImageNet
+# All directories must end with '/'
 if getpass.getuser() == 'fantasie':  # user is Yifei
     ROOT_DIR = '/media/fantasie/backup/data/ILSVRC2012/'  # root directory for ImageNet
     SOURCE_DIR = ROOT_DIR + 'val/'  # directory for validation set
-    CORRECT_DIR = ROOT_DIR + 'val_correct1/'  # directory for correctly classified validation samples
+    CORRECT_DIR = ROOT_DIR + 'val_correct/'  # directory for correctly classified validation samples
     ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_fast-gradient/'  # directory for precomputed adversarial examples
 else:  # user is Chao
     ROOT_DIR = ''
@@ -176,19 +177,18 @@ def save_array_to_image(arr, fp):
     cv2.imwrite(fp, arr)
 
 
-def save_adversarial_examples(source_dir):
+def save_adversarial_examples(clean_dir):
     """
     Scripts to compute and save adversarial examples with foolbox
     Need to manually set the models, directories and hyper-parameters
     Note:
     Discarded because the execution time is too long for sophisticated attacks such as PGD, and no clipping is provided
     to account for quantization
-    :param source_dir: root directory of the legitimate clean data
+    :param clean_dir: root directory of the legitimate clean data
     :return: None
     """
-    root_dir = os.path.dirname(source_dir)
-    sub_dir = os.path.basename(source_dir) + "_adv_resnet152_test"  # named after hyper-parameters
-    target_dir = os.path.join(root_dir, sub_dir)
+
+    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_test"  # named after hyper-parameters
 
     # Load and create an instance of pretrained model
     resnet = models.resnet152(pretrained=True).cuda().eval()
@@ -198,7 +198,7 @@ def save_adversarial_examples(source_dir):
 
     class_index_dict = map_class_indices()  # {n01440764: 0}
 
-    image_paths = sorted(glob(source_dir + '/**/*.JPEG', recursive=True))
+    image_paths = sorted(glob(clean_dir + '/**/*.JPEG', recursive=True))
     count = 0
     for image_path in image_paths[0:50]:
         # Get source image and label
@@ -210,7 +210,7 @@ def save_adversarial_examples(source_dir):
         attack = foolbox.attacks.GradientSignAttack(model)
         adv_image = attack(image, label)  # max_epsilon=0.5, epsilons=1)
 
-        output_path = os.path.join(target_dir, image_path[len(source_dir) + 1:])
+        output_path = os.path.join(adv_dir, image_path[len(clean_dir):])
         if adv_image is not None:  # sometimes adversarial attack return None
             save_array_to_image(adv_image, output_path)
 
@@ -218,11 +218,14 @@ def save_adversarial_examples(source_dir):
         print(count)
 
 
-def save_adversarial_examples_batch(source_dir):
+def save_adversarial_examples_batch(clean_dir):
+    """
+    Scripts for pre-computing and saving adversarial examples with IBM-ART
+    :param clean_dir: root directory of the legitimate clean data
+    :return: None
+    """
     batch_size = 16
-    root_dir = os.path.dirname(source_dir)
-    sub_dir = os.path.basename(source_dir) + "_adv_resnet152_pgd"  # named after hyper-parameters
-    target_dir = os.path.join(root_dir, sub_dir)
+    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_pgd-0.1"  # named after hyper-parameters
 
     # Load pretrained model
     model = models.resnet152(pretrained=True).cuda().eval()
@@ -231,11 +234,11 @@ def save_adversarial_examples_batch(source_dir):
     std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
     classifier = PyTorchClassifier((0.0, 1.0), model=model, preprocessing=(mean, std),
                                    loss=torch.nn.modules.loss.CrossEntropyLoss(),
-                                   optimizer=torch.optim.Adam,
+                                   optimizer=torch.optim.Adam,  # doesn't really matter for pretrained networks
                                    input_shape=(3, 224, 224), nb_classes=1000)
-    adv_crafter = ProjectedGradientDescent(classifier)
+    adv_crafter = ProjectedGradientDescent(classifier, eps=.1, eps_step=0.05)
 
-    image_paths = sorted(glob(ROOT_DIR + '/**/*.JPEG', recursive=True))
+    image_paths = sorted(glob(clean_dir + '/**/*.JPEG', recursive=True))
     count = 0
     for start in range(0, len(image_paths), batch_size):
         end = min(start + batch_size, len(image_paths))
@@ -247,7 +250,7 @@ def save_adversarial_examples_batch(source_dir):
 
         print("start: %d, end: %d" % (start, end))
         for (image_path, adv_image) in zip(image_batch_paths, adv_images):
-            output_path = os.path.join(target_dir, image_path[len(source_dir) + 1:])
+            output_path = os.path.join(adv_dir, image_path[len(clean_dir):])
             save_array_to_image(adv_image, output_path)
 
             count += 1
@@ -255,4 +258,4 @@ def save_adversarial_examples_batch(source_dir):
 
 
 if __name__ == "__main__":
-    save_adversarial_examples_batch(ROOT_DIR)
+    save_adversarial_examples_batch(clean_dir=CORRECT_DIR)
