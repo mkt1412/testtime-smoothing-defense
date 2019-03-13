@@ -8,9 +8,12 @@ import foolbox
 from art.classifiers import PyTorchClassifier
 from art.attacks.projected_gradient_descent import ProjectedGradientDescent
 from art.attacks.fast_gradient import FastGradientMethod
+from art.attacks.deepfool import DeepFool
+from art.attacks.saliency_map import SaliencyMapMethod
 import torch
 from torchvision import models
 import cv2
+import pickle
 import getpass
 
 # Set up the root directory of ImageNet
@@ -20,6 +23,7 @@ if getpass.getuser() == 'fantasie':  # user is Yifei
     SOURCE_DIR = ROOT_DIR + 'val/'  # directory for validation set
     CORRECT_DIR = ROOT_DIR + 'val_correct/'  # directory for correctly classified validation samples
     ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_fast-gradient/'  # directory for precomputed adversarial examples
+    NIPS17_DIR = '/media/fantasie/WD Elements/data/nips-2017-adversarial-learning-development-set/'  # NIPS-17 dataset
 else:  # user is Chao
     ROOT_DIR = ''
     SOURCE_DIR = ROOT_DIR + 'val'
@@ -75,6 +79,31 @@ def load_image(img_path, resize=True, normalize=False):
     return img
 
 
+def load_pkl_image(img_path, normalize=False):
+    """
+    Load float images from a .pkl file that has been saved via save_array_to_pkl()
+    Note that the image in .pkl has been already resized, there is no resize option available
+    :param img_path: file path of the .pkl image file
+    :param normalize: whether or not to perform normalization for Pytorch models, default False
+    :return: numpy array with size (3 x h x w)
+    """
+    with open(img_path, "rb") as f:
+        img = pickle.load(f)
+
+    if normalize:
+        normalize = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+        preprocess = transforms.Compose([
+            transforms.ToTensor(),  # converts to channel-first tensor
+            normalize,
+        ])
+        img = np.array(preprocess(img))
+
+    return img
+
+
 def load_image_batch(img_paths):
     """
     Load a batch of images
@@ -116,6 +145,23 @@ def map_class_indices():
         count += 1
 
     return class_index
+
+
+def load_nips17_labels(nips_dir=NIPS17_DIR):
+    """
+    Load the ground truth label and target class for NIPS17 DEV dataset
+    :param nips_dir: directory of the NIPS17 DEV dataset
+    :return: dictionary {key: image name w/o extension; value: [ground-truth label, target class])
+    """
+    import csv
+    labels = {}
+    with open(nips_dir + 'images.csv', newline='') as f:
+        reader = csv.reader(f)
+        _ = next(reader)  # skip the first row
+        for row in reader:
+            imgname, label, target = row[0], int(row[6]), int(row[7])
+            labels[imgname] = [label, target]
+    return labels
 
 
 def select_correct_images(source_dir=SOURCE_DIR, target_dir=CORRECT_DIR, save_files=False):
@@ -177,18 +223,32 @@ def save_array_to_image(arr, fp):
     cv2.imwrite(fp, arr)
 
 
+def save_array_to_pkl(arr, fp):
+    """
+    Save a float array to the disk input arr is "passed by value"
+    :param arr: numpy array, size (h x w x 3) or (3 x h x w)
+    :param fp: target file path
+    :return: None
+    """
+    directory = os.path.dirname(fp)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    with open(fp, "wb") as f:
+        pickle.dump(arr, f)
+
+
 def save_adversarial_examples(clean_dir):
     """
     Scripts to compute and save adversarial examples with foolbox
     Need to manually set the models, directories and hyper-parameters
-    Note:
-    Discarded because the execution time is too long for sophisticated attacks such as PGD, and no clipping is provided
-    to account for quantization
+    Save "non-exisiting" adversarial examples without quantization in a .pkl file
     :param clean_dir: root directory of the legitimate clean data
     :return: None
     """
+    dataset = 'ImageNet' if 'ILSVRC' in clean_dir else 'NIPS17'
 
-    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_test"  # named after hyper-parameters
+    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_DeepFool"  # named after hyper-parameters
 
     # Load and create an instance of pretrained model
     resnet = models.resnet152(pretrained=True).cuda().eval()
@@ -196,23 +256,31 @@ def save_adversarial_examples(clean_dir):
     std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
     model = foolbox.models.PyTorchModel(resnet, bounds=(0.0, 1.0), num_classes=1000, preprocessing=(mean, std))
 
-    class_index_dict = map_class_indices()  # {n01440764: 0}
+    if dataset == 'ImageNet':  # ImageNet validation set
+        image_paths = sorted(glob(clean_dir + '/**/*.JPEG', recursive=True))
+        class_index_dict = map_class_indices()  # {n01440764: 0}
+    else:  # NIPS 17 adversarial learning development set
+        image_paths = sorted(glob(clean_dir + '/**/*.png', recursive=True))
+        labels_dict = load_nips17_labels()
 
-    image_paths = sorted(glob(clean_dir + '/**/*.JPEG', recursive=True))
     count = 0
-    for image_path in image_paths[0:50]:
+    for image_path in image_paths:
         # Get source image and label
         image = load_image(image_path)
-        code = os.path.basename(os.path.dirname(image_path))
-        label = class_index_dict[code]
+
+        if dataset == 'ImageNet':
+            code = os.path.basename(os.path.dirname(image_path))
+            label = class_index_dict[code]
+        else:
+            label = labels_dict[os.path.splitext(os.path.basename(image_path))[0]][0]  # fn (w/o ext): [label, target]
 
         # Apply attack on source image
-        attack = foolbox.attacks.GradientSignAttack(model)
-        adv_image = attack(image, label)  # max_epsilon=0.5, epsilons=1)
+        attack = foolbox.attacks.DeepFoolAttack(model)
+        adv_image = attack(image, label)
 
-        output_path = os.path.join(adv_dir, image_path[len(clean_dir):])
+        output_path = os.path.join(adv_dir, os.path.splitext(image_path)[0][len(clean_dir):] + '.pkl')
         if adv_image is not None:  # sometimes adversarial attack return None
-            save_array_to_image(adv_image, output_path)
+            save_array_to_pkl(adv_image, output_path)
 
         count += 1
         print(count)
@@ -225,7 +293,7 @@ def save_adversarial_examples_batch(clean_dir):
     :return: None
     """
     batch_size = 16
-    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_pgd-0.1"  # named after hyper-parameters
+    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_SaliencyMap"  # named after hyper-parameters
 
     # Load pretrained model
     model = models.resnet152(pretrained=True).cuda().eval()
@@ -236,7 +304,7 @@ def save_adversarial_examples_batch(clean_dir):
                                    loss=torch.nn.modules.loss.CrossEntropyLoss(),
                                    optimizer=torch.optim.Adam,  # doesn't really matter for pretrained networks
                                    input_shape=(3, 224, 224), nb_classes=1000)
-    adv_crafter = ProjectedGradientDescent(classifier, eps=.1, eps_step=0.05)
+    adv_crafter = ProjectedGradientDescent(classifier)
 
     image_paths = sorted(glob(clean_dir + '/**/*.JPEG', recursive=True))
     count = 0
@@ -258,4 +326,4 @@ def save_adversarial_examples_batch(clean_dir):
 
 
 if __name__ == "__main__":
-    save_adversarial_examples_batch(clean_dir=CORRECT_DIR)
+    save_adversarial_examples(clean_dir=NIPS17_DIR)
