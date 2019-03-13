@@ -170,7 +170,7 @@ def subset_samping(list_pool, sample_num):
     Select random subset of Imagenet
     :param list_pool: paths of all the images
     :param sample_num: size of subset
-    :return:
+    :return: random subset
     '''
     import random
     random.seed(9012)
@@ -278,10 +278,10 @@ def save_adversarial_examples(clean_dir):
         image_paths = sorted(glob(clean_dir + '/**/*.png', recursive=True))
         labels_dict = load_nips17_labels()
 
-    image_paths = subset_samping(image_paths, sample_num=5050)
+    image_paths = subset_samping(image_paths, sample_num=5300)
 
-    count = 0
-    for image_path in image_paths:
+    count = 4996
+    for image_path in image_paths[5200:]:
         # Get source image and label
         image = load_image(image_path)
 
@@ -298,9 +298,13 @@ def save_adversarial_examples(clean_dir):
         output_path = os.path.join(adv_dir, os.path.splitext(image_path)[0][len(clean_dir):] + '.pkl')
         if adv_image is not None:  # sometimes adversarial attack return None
             save_array_to_pkl(adv_image, output_path)
+            count += 1
 
-        count += 1
         print(count)
+
+        if count >= 5000:
+            break
+
 
 
 def save_adversarial_examples_batch(clean_dir):
