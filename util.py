@@ -25,10 +25,11 @@ if getpass.getuser() == 'fantasie':  # user is Yifei
     ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_fast-gradient/'  # directory for precomputed adversarial examples
     NIPS17_DIR = '/media/fantasie/WD Elements/data/nips-2017-adversarial-learning-development-set/'  # NIPS-17 dataset
 else:  # user is Chao
-    ROOT_DIR = ''
-    SOURCE_DIR = ROOT_DIR + 'val'
-    CORRECT_DIR = ROOT_DIR + 'val_correct'
-    ADV_DIR = ROOT_DIR + ''
+    ROOT_DIR = '/home/chaotang/PycharmProjects/data/ILSVRC2012/'
+    SOURCE_DIR = ROOT_DIR + 'val/'
+    CORRECT_DIR = ROOT_DIR + 'val_correct/'
+    ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_fast-gradient/'
+    NIPS17_DIR = '/home/chaotang/PycharmProjects/data/NIPS2017/nips-2017-adversarial-learning-development-set/'
 
 
 def display_array_as_image(arr):
@@ -164,6 +165,20 @@ def load_nips17_labels(nips_dir=NIPS17_DIR):
     return labels
 
 
+def subset_samping(list_pool, sample_num):
+    '''
+    Select random subset of Imagenet
+    :param list_pool: paths of all the images
+    :param sample_num: size of subset
+    :return:
+    '''
+    import random
+    random.seed(9012)
+    random.shuffle(list_pool)
+
+    return list_pool[0:sample_num]
+
+
 def select_correct_images(source_dir=SOURCE_DIR, target_dir=CORRECT_DIR, save_files=False):
     """
     Scripts used for selecting samples that are correctly classified by a pretrained network
@@ -248,7 +263,7 @@ def save_adversarial_examples(clean_dir):
     """
     dataset = 'ImageNet' if 'ILSVRC' in clean_dir else 'NIPS17'
 
-    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_DeepFool"  # named after hyper-parameters
+    adv_dir = os.path.dirname(clean_dir) + "_adv_5000_resnet152_DeepFool"  # named after hyper-parameters
 
     # Load and create an instance of pretrained model
     resnet = models.resnet152(pretrained=True).cuda().eval()
@@ -262,6 +277,8 @@ def save_adversarial_examples(clean_dir):
     else:  # NIPS 17 adversarial learning development set
         image_paths = sorted(glob(clean_dir + '/**/*.png', recursive=True))
         labels_dict = load_nips17_labels()
+
+    image_paths = subset_samping(image_paths, sample_num=5050)
 
     count = 0
     for image_path in image_paths:
@@ -326,4 +343,4 @@ def save_adversarial_examples_batch(clean_dir):
 
 
 if __name__ == "__main__":
-    save_adversarial_examples(clean_dir=NIPS17_DIR)
+    save_adversarial_examples(clean_dir=CORRECT_DIR)
