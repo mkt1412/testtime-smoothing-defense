@@ -38,6 +38,7 @@ def diffusion_and_forward(image, model, diff_list, visual_list, mode="diffusion"
     :param diff_list: diffusion layers
     :param visual_list: visualization layers
     :param mode: diffusion mode
+    :param visual_flag: visualization flag
     :return: probability
     """
     image = torch.unsqueeze(torch.from_numpy(image), 0).cuda()
@@ -51,21 +52,22 @@ def diffusion_and_forward(image, model, diff_list, visual_list, mode="diffusion"
     features = resnet_1st(image)
 
     plt.figure("features")
-    plt.subplot(2,4,1)
-    plt.title("layer0")
-    plt.imshow(features[0, 20, :].cpu().numpy(), cmap="gray")
 
-    for i in range(1, len(modules)-1):
+    for i in range(0, len(modules)-1):
         layer = modules[i:i+1]
         layer = nn.Sequential(*layer)
-        features = layer(features)
+        if i == 0:
+            features = layer(image)
+        else:
+            features = layer(features)
         if i in diff_list:
             features = diffuse_features(features, mode=mode)
-        if i in visual_list:
+        if i in visual_list and len(visual_list) != 0:
             plt.subplot(2, 4, i+1)
             plt.title("layer{}".format(i))
             plt.imshow(features[0, 20, :].cpu().numpy(), cmap="gray")
-    plt.show()
+    if len(visual_list) != 0:
+        plt.show()
 
     resnet_last = modules[-1:]
     resnet_last = nn.Sequential(*resnet_last)
@@ -75,16 +77,16 @@ def diffusion_and_forward(image, model, diff_list, visual_list, mode="diffusion"
 
 
 if __name__ == "__main__":
-    img_path = "/home/chaotang/PycharmProjects/data/ILSVRC2012/" \
+    img_path = "/home/chao/PycharmProjects/data/ILSVRC2012/" \
                "val_correct_adv_resnet152_pgd/n01514668/ILSVRC2012_val_00023551.JPEG"
     image = util.load_image(img_path=img_path, normalize=True)
     resnet152 = models.resnet152(pretrained=True).cuda().eval()
     # summary(resnet152, (3, 224, 224))
     # print(resnet152)
-    diff_list = [6]  # diffusion layers
-    visual_list = [1, 2, 3, 4, 5, 6, 7]  # visualization layers
+    diff_list = [1]  # diffusion layers
+    visual_list = []  # visualization layers
     prob = diffusion_and_forward(image=image, model=resnet152, diff_list=diff_list,
-                                 visual_list=visual_list, mode="median")
+                                 visual_list=visual_list, mode="diffusion")
     prediction = np.argmax(prob)
     print(prediction)
 

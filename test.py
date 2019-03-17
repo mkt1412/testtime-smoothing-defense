@@ -6,6 +6,8 @@ import os
 from scipy.signal import medfilt
 from medpy import filter as filter
 from util import display_array_as_image, load_image, load_pkl_image, map_class_indices, load_nips17_labels
+import time
+from scipy.ndimage.filters import median_filter, convolve
 
 
 # Attacked_Dir := root folder of adversarial examples
@@ -15,7 +17,7 @@ from util import display_array_as_image, load_image, load_pkl_image, map_class_i
 #     save(img_adv, path=os.path.join(Attacked_Dir, img_path))
 
 # Configure dataset
-DATASET = "NIPS17"
+DATASET = "ImageNet"
 if DATASET == "ImageNet":
     class_index_dict = map_class_indices()
 else:
@@ -28,18 +30,26 @@ std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
 model = foolbox.models.PyTorchModel(resnet152, bounds=(0.0, 1.0), num_classes=1000, preprocessing=(mean, std))
 
 
-image_paths = sorted(glob(r'/media/fantasie/WD Elements/data/nips-2017-adversarial-learning-development-set_adv_resnet152_DeepFool/**/*.pkl',
+image_paths = sorted(glob(r'/home/chao/PycharmProjects/data/ILSVRC2012'
+                          r'/val_correct_adv_resnet152_pgd-0.01-0.002/**/*.JPEG',
                           recursive=True))
 
 i, count = 1, 0
+start_time = time.time()
 
 for image_path in image_paths:
     print("i = %d" % i)
     i += 1
 
-    image = load_pkl_image(image_path)
-    # image = medfilt(image).astype("float32")
-    # image = filter.anisotropic_diffusion(image, niter=10).astype("float32")
+    if image_path.endswith('pkl'):
+        image = load_pkl_image(image_path)
+    else:
+        if 'resnet152' in image_path:  # adversarial images, already resized
+            image = load_image(image_path, resize=False)
+        else:  # clean images, need resizing
+            image = load_image(image_path, resize=True)
+    # image = filter.anisotropic_diffusion(image, niter=2, option=1).astype("float32")
+    # image = median_filter(image, size=(1, 3, 3, 3))
 
     prediction = np.argmax(model.predictions(image))
 
@@ -54,4 +64,7 @@ for image_path in image_paths:
         count += 1
         print("count = %d" % count)
 
+end_time = time.time()
+total_time = end_time - start_time
+print("Total time:", total_time)
 print("Test accuracy: ", count/len(image_paths))
