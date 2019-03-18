@@ -6,8 +6,11 @@ import os
 from scipy.signal import medfilt
 from medpy import filter as filter
 from util import display_array_as_image, load_image, load_pkl_image, map_class_indices, load_nips17_labels
+import util
+from skimage.restoration import denoise_nl_means, denoise_bilateral
 import time
 from scipy.ndimage.filters import median_filter, convolve
+from modified_curvature_motion import modified_curvature_motion
 
 
 # Attacked_Dir := root folder of adversarial examples
@@ -30,9 +33,7 @@ std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
 model = foolbox.models.PyTorchModel(resnet152, bounds=(0.0, 1.0), num_classes=1000, preprocessing=(mean, std))
 
 
-image_paths = sorted(glob(r'/home/chao/PycharmProjects/data/ILSVRC2012'
-                          r'/val_correct_adv_resnet152_pgd-0.01-0.002/**/*.JPEG',
-                          recursive=True))
+image_paths = sorted(glob(util.ROOT_DIR + 'val_correct_adv_resnet152_pgd-0.01-0.002/' + '**/*.JPEG', recursive=True))
 
 i, count = 1, 0
 start_time = time.time()
@@ -48,8 +49,18 @@ for image_path in image_paths:
             image = load_image(image_path, resize=False)
         else:  # clean images, need resizing
             image = load_image(image_path, resize=True)
-    # image = filter.anisotropic_diffusion(image, niter=2, option=1).astype("float32")
-    # image = median_filter(image, size=(1, 3, 3, 3))
+
+    # image = medfilt(image).astype("float32")
+    # image = gaussian_filter(image, 5).astype("float32")
+    # image = filter.anisotropic_diffusion(image, niter=4, option=1).astype("float32")
+
+    # image = np.transpose(denoise_nl_means(np.transpose(image, (1, 2, 0)), multichannel=True), (2, 1, 0)).astype("float32")
+    # image = denoise_nl_means(image, multichannel=True).astype(np.float32)
+
+    # image = np.transpose(denoise_bilateral(np.transpose(image, (1, 2, 0)).astype('double'), multichannel=True), (2, 1, 0)).astype("float32")
+    # image = denoise_bilateral(image.astype(np.double), multichannel=True).astype(np.float32)
+
+    image = modified_curvature_motion(image, k=1, niter=20)
 
     prediction = np.argmax(model.predictions(image))
 
@@ -63,6 +74,7 @@ for image_path in image_paths:
     if label == prediction:
         count += 1
         print("count = %d" % count)
+    print("percentage = %f" % (count / i))
 
 end_time = time.time()
 total_time = end_time - start_time
