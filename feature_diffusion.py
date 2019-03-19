@@ -21,9 +21,9 @@ def diffuse_features(features, mode="diffusion"):
     if mode == "diffusion":
         features = anisotropic_diffusion(features)
     elif mode == "mean":
-        features = convolve(features, weights=np.full((1, 3, 3, 3), 1.0/27))
+        features = convolve(features, weights=np.full((1, 1, 3, 3), 1.0/27))
     elif mode == "median":
-        features = median_filter(features, size=(1, 3, 3, 3))
+        features = median_filter(features, size=(1, 1, 3, 3))
 
     features = (torch.from_numpy(features)).cuda()  # from numpy back to tensor
 
@@ -47,11 +47,11 @@ def diffusion_and_forward(image, model, diff_list, visual_list, mode="diffusion"
         p.requires_grad = False
 
     modules = list(model.children())
-    resnet_1st = modules[0:1]
-    resnet_1st = nn.Sequential(*resnet_1st)
-    features = resnet_1st(image)
 
-    plt.figure("features")
+    if len(visual_list) != 0:
+        plt.figure("features")
+
+    features = 0
 
     for i in range(0, len(modules)-1):
         layer = modules[i:i+1]
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     diff_list = [1]  # diffusion layers
     visual_list = []  # visualization layers
     prob = diffusion_and_forward(image=image, model=resnet152, diff_list=diff_list,
-                                 visual_list=visual_list, mode="diffusion")
+                                 visual_list=visual_list, mode="mean")
     prediction = np.argmax(prob)
     print(prediction)
 
