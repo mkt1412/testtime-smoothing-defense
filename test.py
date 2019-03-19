@@ -3,6 +3,7 @@ from torchvision import models
 import foolbox
 import numpy as np
 import os
+import sys
 from scipy.signal import medfilt
 from medpy import filter as filter
 from util import display_array_as_image, load_image, load_pkl_image, map_class_indices, load_nips17_labels
@@ -13,11 +14,8 @@ from scipy.ndimage.filters import median_filter, convolve
 from modified_curvature_motion import modified_curvature_motion
 
 
-# Attacked_Dir := root folder of adversarial examples
-# img_paths = glob(path_to_val)
-# For each image img in /IL...2012/val (for img_path in img_paths)
-#     img_adv = fgsm(img)
-#     save(img_adv, path=os.path.join(Attacked_Dir, img_path))
+K = float(sys.argv[1])
+print("*** K = %f, niter = 20 ***" % K)
 
 # Configure dataset
 DATASET = "ImageNet"
@@ -39,7 +37,7 @@ i, count = 1, 0
 start_time = time.time()
 
 for image_path in image_paths:
-    print("i = %d" % i)
+    # print("i = %d" % i)
     i += 1
 
     if image_path.endswith('pkl'):
@@ -60,8 +58,7 @@ for image_path in image_paths:
     # image = np.transpose(denoise_bilateral(np.transpose(image, (1, 2, 0)).astype('double'), multichannel=True), (2, 1, 0)).astype("float32")
     # image = denoise_bilateral(image.astype(np.double), multichannel=True).astype(np.float32)
 
-    image = modified_curvature_motion(image, k=1, niter=20)
-
+    image = modified_curvature_motion(image, k=K, niter=20)
     prediction = np.argmax(model.predictions(image))
 
     if DATASET == "ImageNet":
@@ -73,8 +70,8 @@ for image_path in image_paths:
 
     if label == prediction:
         count += 1
-        print("count = %d" % count)
-    print("percentage = %f" % (count / i))
+        # print("count = %d" % count)
+    # print("percentage = %f" % (count / i))
 
 end_time = time.time()
 total_time = end_time - start_time
