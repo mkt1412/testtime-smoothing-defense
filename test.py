@@ -4,19 +4,22 @@ import foolbox
 import numpy as np
 import os
 from medpy.filter import anisotropic_diffusion
-from util import display_array_as_image, load_image, load_pkl_image, map_class_indices, load_nips17_labels
+from util import load_image, load_pkl_image, map_class_indices, load_nips17_labels, save_array_to_pkl
 from skimage.restoration import denoise_nl_means, denoise_bilateral
 import time
 from scipy.ndimage.filters import median_filter, convolve, gaussian_filter
 from modified_curvature_motion import modified_curvature_motion
+from scipy.special import softmax
 import getpass
 import argparse
 
-# Configuration on directories
+# Configuration on directories: must end with '/'
 if getpass.getuser() == 'fantasie':  # user is Yifei
     DATA_DIR = '/media/fantasie/backup/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
+    RESULT_DIR = 'result/'
 else:  # user is Chao
     DATA_DIR = '/home/chaotang/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
+    RESULT_DIR = None
 
 # Parsing input arguments
 parser = argparse.ArgumentParser(description='Smoothing against adversarial examples')
@@ -51,12 +54,12 @@ if __name__ == "__main__":
     # File paths of the target images
     image_paths = sorted(glob(args.data_dir + '**/*.JPEG', recursive=True))
 
-    i, count = 1, 0
+    i, count = 0, 0
+    confidences = np.zeros(len(image_paths))
     start_time = time.time()
 
     for image_path in image_paths:
         # print("i = %d" % i)
-        i += 1
 
         # Load input images
         if image_path.endswith('pkl'):
@@ -68,15 +71,15 @@ if __name__ == "__main__":
                 image = load_image(image_path, resize=True)
 
         # Choose smoothing methods and apply
-        if args.defense == 'anisotropic_diffusion':
+        if args.defense == 'anisotropic-diffusion':
             image = anisotropic_diffusion(image, niter=10).astype("float32")
-        elif args.defense == 'modified_curvature_motion':
+        elif args.defense == 'modified-curvature-motion':
             image = modified_curvature_motion(image, k=args.param[0], niter=int(args.param[1]))
         elif args.defense == 'mean':
             image = convolve(image, weights=[1, 3, 3, 3] / 27.0)
         elif args.defense == 'median':
             image = median_filter(image)
-        elif args.defense == 'non_local_mean':
+        elif args.defense == 'non-local-mean':
             image = np.transpose(denoise_nl_means(np.transpose(image, (1, 2, 0)), multichannel=True),
                                  (2, 1, 0)).astype("float32")
         elif args.defense == 'bilateral':
@@ -86,9 +89,12 @@ if __name__ == "__main__":
         else:
             pass
 
-        # Get the output class
-        prediction = np.argmax(model.predictions(image))
+        # Get the output class and confidence
+        output = model.predictions(image)
+        prediction = np.argmax(output)
+        confidence = softmax(output)[prediction]
 
+        # Map the ground truth label to index
         if DATASET == "ImageNet":
             code = os.path.basename(os.path.dirname(image_path))
             label = class_index_dict[code]
@@ -98,9 +104,19 @@ if __name__ == "__main__":
         if label == prediction:
             count += 1
             # print("count = %d" % count)
+            confidences[i] = confidence
+        else:
+            confidences[i] = -confidence  # set the confidence ("illusiveness") to negative for misclassified samples
+
+        i += 1
         # print("percentage = %f" % (count / i))
 
     end_time = time.time()
     total_time = end_time - start_time
     print("Total time:", total_time)
     print("Test accuracy: ", count/len(image_paths))
+
+    # Save test results for each sample (in a sorted sequence)
+    if RESULT_DIR is not None:
+        result_fp = RESULT_DIR + DATA_DIR.split('/')[-1] + args.defense + '_' + str(args.param) + '.pkl'
+        save_array_to_pkl(confidences, result_fp)
