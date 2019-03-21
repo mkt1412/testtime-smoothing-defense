@@ -22,7 +22,7 @@ if getpass.getuser() == 'fantasie':  # user is Yifei
     ROOT_DIR = '/media/fantasie/backup/data/ILSVRC2012/'  # root directory for ImageNet
     SOURCE_DIR = ROOT_DIR + 'val/'  # directory for validation set
     CORRECT_DIR = ROOT_DIR + 'val_correct/'  # directory for correctly classified validation samples
-    ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_fast-gradient/'  # directory for precomputed adversarial examples
+    ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_pgd-0.3-0.1/'  # directory for precomputed adversarial examples
     NIPS17_DIR = '/media/fantasie/WD Elements/data/nips-2017-adversarial-learning-development-set/'  # NIPS-17 dataset
 else:  # user is Chao
     ROOT_DIR = '/home/chaotang/PycharmProjects/data/ILSVRC2012/'
@@ -43,6 +43,19 @@ def display_array_as_image(arr):
     if np.max(arr) < 2.0:
         arr = arr * 255.0
     plt.imshow(arr.astype(np.uint8))
+
+
+def get_paths_by_ext(directory, exts=['JPEG']):
+    """
+    Get the file paths of the files that satisfy any of the specified extensions
+    :param directory: target directory
+    :param exts: extension list
+    :return: sorted list of file paths
+    """
+    img_paths = []
+    for ext in exts:
+        img_paths = img_paths + glob(os.path.join(directory) + '**/*.' + ext, recursive=True)
+    return sorted(img_paths)
 
 
 def load_image(img_path, resize=True, normalize=False):
@@ -306,7 +319,6 @@ def save_adversarial_examples(clean_dir):
             break
 
 
-
 def save_adversarial_examples_batch(clean_dir):
     """
     Scripts for pre-computing and saving adversarial examples with IBM-ART
@@ -346,5 +358,41 @@ def save_adversarial_examples_batch(clean_dir):
             print(count)
 
 
+def summarize_categorical_results(result_path, test_dir=ADV_DIR):
+    """
+    Compute summary statistics for each category
+    :param result_path: file path of the .pkl file that stores the prediction confidence(+)/illusiveness(-)
+    :param test_dir: root directory of the test images
+    :return: numpy array of categorical accuracy (1000, )
+    """
+    with open(result_path, "rb") as f:
+        confidences = pickle.load(f)
+
+    img_paths = get_paths_by_ext(test_dir, ['JPEG', 'pkl'])
+
+    accuracy, amount = np.zeros(1000), np.zeros(1000)  # two arrays for categorical accuracy and # samples, respectively
+    class_index_dict = map_class_indices()  # {n01440764: 0}
+
+    for confidence, img_path in zip(confidences, img_paths):
+        code = os.path.basename(os.path.dirname(img_path))
+        idx = class_index_dict[code]
+
+        amount[idx] += 1
+        if confidence > 0:
+            accuracy[idx] += 1
+
+    amount[amount == 0] = 1  # avoid dividing 0s
+    accuracy /= amount
+
+    return accuracy
+
+
 if __name__ == "__main__":
-    save_adversarial_examples(clean_dir=CORRECT_DIR)
+    # save_adversarial_examples(clean_dir=CORRECT_DIR)
+
+    accuracy = summarize_categorical_results(
+        'result/val_correct_adv_resnet152_pgd-0.01-0.002_modified-curvature-motion_[0.9, 20.0].pkl')
+    plt.bar(range(1000), accuracy * 100)
+    plt.show()
+
+    pass
