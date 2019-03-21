@@ -3,8 +3,10 @@ from torchvision import models
 import foolbox
 import numpy as np
 import os
+from cv2 import bilateralFilter, fastNlMeansDenoisingColored
 from medpy.filter import anisotropic_diffusion
-from util import load_image, load_pkl_image, map_class_indices, load_nips17_labels, save_array_to_pkl
+from util import load_image, load_pkl_image, map_class_indices, load_nips17_labels, save_array_to_pkl, \
+    display_array_as_image, get_paths_by_ext
 from skimage.restoration import denoise_nl_means, denoise_bilateral
 import time
 from scipy.ndimage.filters import median_filter, convolve, gaussian_filter
@@ -18,22 +20,30 @@ if getpass.getuser() == 'fantasie':  # user is Yifei
     DATA_DIR = '/media/fantasie/backup/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
     RESULT_DIR = 'result/'
 else:  # user is Chao
-    DATA_DIR = '/home/chaotang/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
+    DATA_DIR = '/home/chao/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
     RESULT_DIR = None
 
 # Parsing input arguments
 parser = argparse.ArgumentParser(description='Smoothing against adversarial examples')
 parser.add_argument('--dir', '--data-dir', default=DATA_DIR, type=str,
                     metavar='DIR', help='path to dataset', dest='data_dir')
-parser.add_argument('--d', '--defense', default=None, type=str,
+parser.add_argument('--def', '--defense', default=None, type=str,
                     metavar='DEFENSE', help='defense method', dest='defense')
 parser.add_argument('--p', '--param', default=None, type=float, nargs='+',
                     metavar='PARAMETER', help='defense parameters', dest='param')  # for finding optimal hyper-params
+parser.add_argument('--live', dest='live', action='store_true',
+                    help='display live result')
+parser.add_argument('--save', dest='save', action='store_true',
+                    help='save test result')
 
 
 if __name__ == "__main__":
     # Parsing input arguments
     args = parser.parse_args()
+
+    # %% For debugging: manual configuration
+    # args.defense = 'bilateral'
+
     print("*************************************")
     print("Target directory: %s" % args.data_dir)
     print("Defense method: ", args.defense, ", with parameters ", args.param)
@@ -52,14 +62,15 @@ if __name__ == "__main__":
     model = foolbox.models.PyTorchModel(resnet152, bounds=(0.0, 1.0), num_classes=1000, preprocessing=(mean, std))
 
     # File paths of the target images
-    image_paths = sorted(glob(args.data_dir + '**/*.JPEG', recursive=True))
+    image_paths = get_paths_by_ext(args.data_dir, ['JPEG', 'pkl'])
 
     i, count = 0, 0
     confidences = np.zeros(len(image_paths))
     start_time = time.time()
 
     for image_path in image_paths:
-        # print("i = %d" % i)
+        if args.live:
+            print("i = %d" % i)
 
         # Load input images
         if image_path.endswith('pkl'):
@@ -72,18 +83,20 @@ if __name__ == "__main__":
 
         # Choose smoothing methods and apply
         if args.defense == 'anisotropic-diffusion':
-            image = anisotropic_diffusion(image, niter=10).astype("float32")
+            image = anisotropic_diffusion(image, niter=10, kappa=args.param[1]).astype("float32")
         elif args.defense == 'modified-curvature-motion':
             image = modified_curvature_motion(image, k=args.param[0], niter=int(args.param[1]))
         elif args.defense == 'mean':
             image = convolve(image, weights=[1, 3, 3, 3] / 27.0)
         elif args.defense == 'median':
             image = median_filter(image)
-        elif args.defense == 'non-local-mean':
-            image = np.transpose(denoise_nl_means(np.transpose(image, (1, 2, 0)), multichannel=True),
-                                 (2, 1, 0)).astype("float32")
+        elif args.defense == 'non-local-mean':  # very slow
+            image = np.transpose(fastNlMeansDenoisingColored(np.transpose((image * 255).astype('uint8'), (1, 2, 0)),
+                                                             3, 3, 7, 21),  # default
+                                 (2, 1, 0)).astype("float32") / 255
         elif args.defense == 'bilateral':
-            image = denoise_bilateral(image.astype(np.double), multichannel=True).astype(np.float32)
+            image = np.transpose(bilateralFilter(np.transpose(image, (1, 2, 0)), 9, 75, 75),
+                                 (2, 0, 1))
         elif args.defense == 'gaussian':
             image = gaussian_filter(image, 3).astype("float32")
         else:
@@ -103,13 +116,15 @@ if __name__ == "__main__":
 
         if label == prediction:
             count += 1
-            # print("count = %d" % count)
+            if args.live:
+                print("count = %d" % count)
             confidences[i] = confidence
         else:
             confidences[i] = -confidence  # set the confidence ("illusiveness") to negative for misclassified samples
 
         i += 1
-        # print("percentage = %f" % (count / i))
+        if args.live:
+            print("percentage = %f" % (count / i))
 
     end_time = time.time()
     total_time = end_time - start_time
@@ -117,6 +132,6 @@ if __name__ == "__main__":
     print("Test accuracy: ", count/len(image_paths))
 
     # Save test results for each sample (in a sorted sequence)
-    if RESULT_DIR is not None:
-        result_fp = RESULT_DIR + DATA_DIR.split('/')[-1] + args.defense + '_' + str(args.param) + '.pkl'
+    if args.save and RESULT_DIR is not None:
+        result_fp = RESULT_DIR + DATA_DIR.split('/')[-2] + '_' + args.defense + '_' + str(args.param) + '.pkl'
         save_array_to_pkl(confidences, result_fp)

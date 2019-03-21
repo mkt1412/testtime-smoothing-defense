@@ -3,12 +3,12 @@ from util import load_image
 from matplotlib import pyplot as plt
 
 
-def modified_curvature_motion(image, k=0.05, niter=1):
+def modified_curvature_motion(image, niter=1, k=0.05):
     """
     Implementation of Modified Curvature Motion
     :param image: input image
-    :param k: factor
     :param niter: number of iterations
+    :param k: factor
     :return: smoothed and enhanced image
     """
     for i in range(niter):
