@@ -9,8 +9,13 @@ def modified_curvature_motion(image, niter=1, k=0.05):
     :param image: input image
     :param niter: number of iterations
     :param k: factor
-    :return: smoothed and enhanced image
+    :return: smoothed and enhanced image, values in [0, 1]
     """
+    # The method works better for normalized images with intensity values in [0, 1]
+    normalized = np.max(image) <= 1.0
+    if not normalized:
+        image = image / 255.0
+
     for i in range(niter):
         # compute gradients
         # compute gradients
@@ -31,6 +36,7 @@ def modified_curvature_motion(image, niter=1, k=0.05):
         It = (part1+part2+part3)/part4
 
         image = image + 0.1 * It
+        image = image.clip(min=0.0, max=1.0)  # intensity should be in the valid domain
 
     return image
 
