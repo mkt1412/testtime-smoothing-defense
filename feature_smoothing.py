@@ -12,7 +12,7 @@ import getpass
 import time
 
 
-def smooth(inputs, mode="diffusion", param=None):
+def smooth(inputs, mode="anisotropic-diffusion", param=None):
     """
     Different diffusion mode
     :param inputs: input of a layer that needs to be smoothed, either raw images (numpy) or inter-features (tensor)
@@ -25,7 +25,7 @@ def smooth(inputs, mode="diffusion", param=None):
     if is_feature:
         inputs = inputs.cpu().numpy()  # convert features from tensor to array
 
-    if mode == "diffusion":
+    if mode == "anisotropic-diffusion":
         # TODO: need to take care of the two sets of arguments on iteration number, medpy need around 10, cv2 need 4
         param = (0.1, 20, 4) if param is None else param
         if is_feature:
@@ -46,6 +46,8 @@ def smooth(inputs, mode="diffusion", param=None):
             inputs = median_filter(inputs, size=param)
         else:
             inputs = median_filter(inputs, size=param[1:])
+    else:
+        pass
 
     if is_feature:
         inputs = (torch.from_numpy(inputs)).cuda()  # convert numpy back to tensor, for features only
@@ -53,7 +55,7 @@ def smooth(inputs, mode="diffusion", param=None):
     return inputs
 
 
-def forward_and_smooth(image, model, smooth_list=[], visual_list=[], mode="diffusion", param=None):
+def forward_and_smooth(image, model, smooth_list=[], visual_list=[], mode="anisotropic-diffusion", param=None):
     """
     Layer by layer operation for forward and smooth
     :param image: input image, numpy array with shape (3 x 224 x 224)
@@ -69,7 +71,8 @@ def forward_and_smooth(image, model, smooth_list=[], visual_list=[], mode="diffu
     if -1 in smooth_list:
         image = smooth(image, mode=mode, param=param)
 
-    image = torch.unsqueeze(torch.from_numpy(image), 0).cuda()
+    # Normalize and convert to tensor
+    image = torch.unsqueeze(util.normalize_image_to_tensor(image), 0).cuda()
 
     for p in model.parameters():
         p.requires_grad = False

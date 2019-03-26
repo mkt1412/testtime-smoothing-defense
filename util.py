@@ -22,7 +22,7 @@ if getpass.getuser() == 'fantasie':  # user is Yifei
     ROOT_DIR = '/media/fantasie/backup/data/ILSVRC2012/'  # root directory for ImageNet
     SOURCE_DIR = ROOT_DIR + 'val/'  # directory for validation set
     CORRECT_DIR = ROOT_DIR + 'val_correct/'  # directory for correctly classified validation samples
-    ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_pgd-0.3-0.1/'  # directory for precomputed adversarial examples
+    ADV_DIR = ROOT_DIR + 'val_correct_adv_resnet152_pgd-0.05-0.01/'  # directory for precomputed adversarial examples
     NIPS17_DIR = '/media/fantasie/WD Elements/data/nips-2017-adversarial-learning-development-set/'  # NIPS-17 dataset
 else:  # user is Chao
     ROOT_DIR = '/home/chaotang/PycharmProjects/data/ILSVRC2012/'
@@ -64,7 +64,7 @@ def load_image(img_path, resize=True, normalize=False):
     :param img_path: the file path of the image
     :param resize: whether or not to perform resize and centercrop, either do it here or with the model
     :param normalize: whether or not to perform normalization, either do it here or with the model
-    :return: float32 numpy array with shape (3 x h x w)
+    :return: float32 numpy array with shape (3 x h x w), range [0, 1]
     """
     img = Image.open(img_path)
     if img.mode != 'RGB':  # convert other modes with different number of channels to 3-channel'RGB'
@@ -105,15 +105,7 @@ def load_pkl_image(img_path, normalize=False):
         img = pickle.load(f)
 
     if normalize:
-        normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        )
-        preprocess = transforms.Compose([
-            transforms.ToTensor(),  # converts to channel-first tensor
-            normalize,
-        ])
-        img = np.array(preprocess(img))
+        img = np.array(normalize_image_to_tensor(img))
 
     return img
 
@@ -141,6 +133,26 @@ def numpy_to_tensor(arr):
         arr = np.expand_dims(arr, axis=0)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return torch.from_numpy(arr).to(device)
+
+
+def normalize_image_to_tensor(img):
+    """
+    Normalize the numpy-array image and outputs a Pytorch channel-first tensor
+    :param img: float numpy array image, either (3 x h x w) or (h x w x 3)
+    :return: normalized image, pytorch tensor with shape (3 x h x w)
+    """
+    if img.shape[0] < 4:  # convert to channel-last
+        img = np.transpose(img, (1, 2, 0))
+
+    normalize = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+    preprocess = transforms.Compose([
+        transforms.ToTensor(),  # convert to channel-first tensor
+        normalize,
+    ])
+    return preprocess(img)
 
 
 def map_class_indices():
@@ -326,7 +338,7 @@ def save_adversarial_examples_batch(clean_dir):
     :return: None
     """
     batch_size = 16
-    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_SaliencyMap"  # named after hyper-parameters
+    adv_dir = os.path.dirname(clean_dir) + "_adv_resnet152_pgd-0.02-0.004"  # named after hyper-parameters
 
     # Load pretrained model
     model = models.resnet152(pretrained=True).cuda().eval()
@@ -337,7 +349,7 @@ def save_adversarial_examples_batch(clean_dir):
                                    loss=torch.nn.modules.loss.CrossEntropyLoss(),
                                    optimizer=torch.optim.Adam,  # doesn't really matter for pretrained networks
                                    input_shape=(3, 224, 224), nb_classes=1000)
-    adv_crafter = ProjectedGradientDescent(classifier)
+    adv_crafter = ProjectedGradientDescent(classifier, eps=0.02, eps_step=0.004)
 
     image_paths = sorted(glob(clean_dir + '/**/*.JPEG', recursive=True))
     count = 0
@@ -388,11 +400,6 @@ def summarize_categorical_results(result_path, test_dir=ADV_DIR):
 
 
 if __name__ == "__main__":
-    # save_adversarial_examples(clean_dir=CORRECT_DIR)
-
-    accuracy = summarize_categorical_results(
-        'result/val_correct_adv_resnet152_pgd-0.01-0.002_modified-curvature-motion_[0.9, 20.0].pkl')
-    plt.bar(range(1000), accuracy * 100)
-    plt.show()
+    save_adversarial_examples_batch(clean_dir=CORRECT_DIR)
 
     pass

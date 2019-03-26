@@ -3,16 +3,17 @@ from torchvision import models
 import foolbox
 import numpy as np
 import os
+import time
+from util import load_image, load_pkl_image, map_class_indices, load_nips17_labels, save_array_to_pkl, \
+    display_array_as_image, get_paths_by_ext
 from cv2 import bilateralFilter, fastNlMeansDenoisingColored
 from cv2.ximgproc import anisotropicDiffusion
 from medpy.filter import anisotropic_diffusion
-from util import load_image, load_pkl_image, map_class_indices, load_nips17_labels, save_array_to_pkl, \
-    display_array_as_image, get_paths_by_ext
 from skimage.restoration import denoise_nl_means, denoise_bilateral
-import time
 from scipy.ndimage.filters import median_filter, convolve, gaussian_filter
 from modified_curvature_motion import modified_curvature_motion
 from scipy.special import softmax
+from feature_smoothing import forward_and_smooth
 import getpass
 import argparse
 
@@ -32,6 +33,8 @@ parser.add_argument('--def', '--defense', default=None, type=str,
                     metavar='DEFENSE', help='defense method', dest='defense')
 parser.add_argument('--p', '--param', default=None, type=float, nargs='+',
                     metavar='PARAMETER', help='defense parameters', dest='param')  # for finding optimal hyper-params
+parser.add_argument('--slist', '--smooth_list', default=None, type=int, nargs='+',
+                    metavar='SMOOTH_LIST', help='smooth layers', dest='smooth_list')
 parser.add_argument('--live', dest='live', action='store_true',
                     help='display live result')
 parser.add_argument('--save', dest='save', action='store_true',
@@ -47,7 +50,7 @@ if __name__ == "__main__":
 
     print("*************************************")
     print("Target directory: %s" % args.data_dir)
-    print("Defense method: ", args.defense, ", with parameters ", args.param)
+    print("Defense:", args.defense, ", at layers", args.smooth_list, ", with parameters", args.param)
 
     # Configure dataset
     DATASET = "ImageNet"
@@ -58,6 +61,8 @@ if __name__ == "__main__":
 
     # Load pretrained model
     resnet152 = models.resnet152(pretrained=True).cuda().eval()
+
+    # Foolbox model: normalize data as input preprocessing
     mean = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
     std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
     model = foolbox.models.PyTorchModel(resnet152, bounds=(0.0, 1.0), num_classes=1000, preprocessing=(mean, std))
@@ -82,33 +87,11 @@ if __name__ == "__main__":
             else:  # clean images, need resizing
                 image = load_image(image_path, resize=True)
 
-        # Choose smoothing methods and apply
-        if args.defense == 'anisotropic-diffusion':
-            image = anisotropicDiffusion(np.transpose((image * 255).astype('uint8'), (1, 2, 0)),
-                                         alpha=args.param[0], K=args.param[1], niters=int(args.param[2]))
-            image = np.transpose(image, (2, 0, 1)).astype("float32") / 255
-        elif args.defense == 'modified-curvature-motion':
-            image = modified_curvature_motion(image, niter=int(args.param[0]), k=args.param[1])
-        elif args.defense == 'mean':
-            image = convolve(image, weights=[1, 3, 3, 3] / 27.0)
-        elif args.defense == 'median':
-            image = median_filter(image)
-        elif args.defense == 'non-local-mean':  # very slow
-            image = np.transpose(fastNlMeansDenoisingColored(np.transpose((image * 255).astype('uint8'), (1, 2, 0)),
-                                                             3, 3, 7, 21),  # default
-                                 (2, 1, 0)).astype("float32") / 255
-        elif args.defense == 'bilateral':
-            image = np.transpose(bilateralFilter(np.transpose(image, (1, 2, 0)), 5, 75, 75),
-                                 (2, 0, 1))
-        elif args.defense == 'gaussian':
-            image = gaussian_filter(image, 3).astype("float32")
-        else:
-            pass
-
         # Get the output class and confidence
-        output = model.predictions(image)
+        output = forward_and_smooth(image, model=resnet152, mode=args.defense, param=args.param,
+                                    smooth_list=args.smooth_list)
         prediction = np.argmax(output)
-        confidence = softmax(output)[prediction]
+        confidence = softmax(output).squeeze()[prediction]
 
         # Map the ground truth label to index
         if DATASET == "ImageNet":
