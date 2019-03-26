@@ -3,14 +3,15 @@ import torch
 from torchvision import models
 from medpy.filter import anisotropic_diffusion
 from cv2.ximgproc import anisotropicDiffusion
+from cv2 import bilateralFilter
 import torch.nn as nn
 import util
 from torchsummary import summary
 from matplotlib import pyplot as plt
-from scipy.ndimage.filters import median_filter, convolve
+from scipy.ndimage.filters import median_filter, convolve, gaussian_filter
 import getpass
 import time
-
+from modified_curvature_motion import modified_curvature_motion
 
 def smooth(inputs, mode="anisotropic-diffusion", param=None):
     """
@@ -46,6 +47,17 @@ def smooth(inputs, mode="anisotropic-diffusion", param=None):
             inputs = median_filter(inputs, size=param)
         else:
             inputs = median_filter(inputs, size=param[1:])
+    elif mode == "modified-curvature-motion":
+        param = (20, 0.9) if param is None else param
+        inputs = modified_curvature_motion(inputs, niter=param[0], k=param[1])
+    elif mode == "bilateral":
+        if not is_feature:
+            param = (9, 75, 75) if param is None else param
+            inputs = np.transpose(bilateralFilter(np.transpose(inputs, (1, 2, 0)), param[0], param[1], param[2]),
+                                  (2, 0, 1))
+    elif mode == "gaussian":
+        param = (3,) if param is None else param
+        inputs = gaussian_filter(inputs, param[0]).astype("float32")
     else:
         pass
 
@@ -112,7 +124,7 @@ if __name__ == "__main__":
     if getpass.getuser() == 'fantasie':  # user is Yifei
         ROOT_DIR = '/media/fantasie/backup/data/ILSVRC2012/'  # root directory for ImageNet
     else:  # user is Chao
-        ROOT_DIR = '/home/chaotang/PycharmProjects/data/ILSVRC2012/'
+        ROOT_DIR = '/home/chao/PycharmProjects/data/ILSVRC2012/'
 
     img_path = ROOT_DIR + "val_correct_adv_resnet152_pgd/n01514668/ILSVRC2012_val_00023551.JPEG"
     image = util.load_image(img_path=img_path, normalize=True)

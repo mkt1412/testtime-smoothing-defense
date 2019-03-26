@@ -33,7 +33,7 @@ parser.add_argument('--def', '--defense', default=None, type=str,
                     metavar='DEFENSE', help='defense method', dest='defense')
 parser.add_argument('--p', '--param', default=None, type=float, nargs='+',
                     metavar='PARAMETER', help='defense parameters', dest='param')  # for finding optimal hyper-params
-parser.add_argument('--slist', '--smooth_list', default=None, type=int, nargs='+',
+parser.add_argument('--slist', '--smooth_list', default=[], type=int, nargs='+',
                     metavar='SMOOTH_LIST', help='smooth layers', dest='smooth_list')
 parser.add_argument('--live', dest='live', action='store_true',
                     help='display live result')
@@ -46,7 +46,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # %% For debugging: manual configuration
-    # args.defense = 'bilateral'
+    # args.defense = 'guassian'
+    # args.param = (3,)
 
     print("*************************************")
     print("Target directory: %s" % args.data_dir)
