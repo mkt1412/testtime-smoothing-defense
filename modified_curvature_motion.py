@@ -6,18 +6,16 @@ from matplotlib import pyplot as plt
 def modified_curvature_motion(image, niter=1, k=0.05):
     """
     Implementation of Modified Curvature Motion
-    :param image: input image
+    :param image: input image, numpy array with size (3 x h x w)
     :param niter: number of iterations
     :param k: factor
     :return: smoothed and enhanced image, values in [0, 1]
     """
     # The method works better for normalized images with intensity values in [0, 1]
-    normalized = np.max(image) <= 1.0
-    if not normalized:
+    if image.dtype == np.uint8:
         image = image / 255.0
 
     for i in range(niter):
-        # compute gradients
         # compute gradients
         Ix, Iy, Iz = np.gradient(image)
         Ixx, Ixy, Ixz = np.gradient(Ix)

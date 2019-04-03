@@ -6,12 +6,14 @@ from cv2.ximgproc import anisotropicDiffusion
 from cv2 import bilateralFilter
 import torch.nn as nn
 import util
+from util import load_image, load_pkl_image
 from torchsummary import summary
 from matplotlib import pyplot as plt
 from scipy.ndimage.filters import median_filter, convolve, gaussian_filter
 import getpass
 import time
 from modified_curvature_motion import modified_curvature_motion
+
 
 def smooth(inputs, mode="anisotropic-diffusion", param=None):
     """
@@ -41,23 +43,39 @@ def smooth(inputs, mode="anisotropic-diffusion", param=None):
             inputs = convolve(inputs, weights=np.full(param, 1.0/27))
         else:
             inputs = convolve(inputs, weights=np.full(param[1:], 1.0/9))
+            inputs = ((inputs * 255).astype(np.uint8) / 255.0).astype(np.float32)
     elif mode == "median":
         param = (1, 1, 3, 3) if param is None else param
         if is_feature:
             inputs = median_filter(inputs, size=param)
         else:
             inputs = median_filter(inputs, size=param[1:])
+            inputs = ((inputs * 255).astype(np.uint8) / 255.0).astype(np.float32)
     elif mode == "modified-curvature-motion":
-        param = (20, 0.9) if param is None else param
-        inputs = modified_curvature_motion(inputs, niter=param[0], k=param[1])
+        if is_feature:
+            param = (1, 0.1) if param is None else param
+            inputs = inputs.squeeze()
+            inputs = modified_curvature_motion(inputs, niter=int(param[0]), k=param[1])
+            inputs = np.expand_dims(inputs, axis=0)
+        else:
+            param = (20, 0.9) if param is None else param
+            inputs = modified_curvature_motion(inputs, niter=int(param[0]), k=param[1])
+            inputs = ((inputs * 255).astype(np.uint8) / 255.0).astype(np.float32)
     elif mode == "bilateral":
-        if not is_feature:
+        if not is_feature:  # only works for raw images, [0, 1] works better than [0, 255]
             param = (9, 75, 75) if param is None else param
-            inputs = np.transpose(bilateralFilter(np.transpose(inputs, (1, 2, 0)), param[0], param[1], param[2]),
+            inputs = np.transpose(bilateralFilter(np.transpose(inputs, (1, 2, 0)),
+                                                  d=int(param[0]),
+                                                  sigmaColor=(param[1]),
+                                                  sigmaSpace=(param[2])),
                                   (2, 0, 1))
     elif mode == "gaussian":
         param = (3,) if param is None else param
         inputs = gaussian_filter(inputs, param[0]).astype("float32")
+
+    elif mode == 'quantization':
+        inputs = ((inputs * 255).astype(np.uint8) / 255.0).astype(np.float32)
+
     else:
         pass
 
@@ -126,18 +144,25 @@ if __name__ == "__main__":
     else:  # user is Chao
         ROOT_DIR = '/home/chao/PycharmProjects/data/ILSVRC2012/'
 
-    img_path = ROOT_DIR + "val_correct_adv_resnet152_pgd/n01514668/ILSVRC2012_val_00023551.JPEG"
-    image = util.load_image(img_path=img_path, normalize=True)
+    img_path = ROOT_DIR + 'val_correct_adv_resnet152_pgd-0.01-0.002/n01440764/ILSVRC2012_val_00000293.JPEG'
+    if img_path.endswith('pkl'):
+        image = load_pkl_image(img_path)
+    else:
+        if 'resnet152' in img_path:  # adversarial images, already resized
+            image = load_image(img_path, resize=False)
+        else:  # clean images, need resizing
+            image = load_image(img_path, resize=True)
+
     resnet152 = models.resnet152(pretrained=True).cuda().eval()
     # summary(resnet152, (3, 224, 224))
     # print(resnet152)
 
-    smooth_list = [-1, 1]  # diffusion layers
-    visual_list = []  # visualization layers
+    smooth_list = [-1, 4]  # diffusion layers
+    visual_list = list(range(8))  # visualization layers
 
     start = time.time()
     prob = forward_and_smooth(image=image, model=resnet152, smooth_list=smooth_list,
-                              visual_list=visual_list, mode="")
+                              visual_list=visual_list, mode="modified-curvature-motion")
     print("Forward and smooth time: ", time.time() - start)
 
     prediction = np.argmax(prob)
