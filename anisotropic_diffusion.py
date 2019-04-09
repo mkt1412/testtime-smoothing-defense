@@ -2,6 +2,9 @@ import numpy as np
 from util import load_image
 from matplotlib import pyplot as plt
 import warnings
+from scipy.ndimage.filters import convolve
+from medpy.filter import anisotropic_diffusion
+import time
 
 
 def anisotropic_diffusion_1d(input, niter=1, kappa=50, gamma=0.1, option=1):
@@ -45,11 +48,18 @@ def anisotropic_diffusion_3d(input, niter=1, kappa=50, gamma=0.1, option=1):
     :param option: energy function option 1 or 2
     :return: diffused image
     """
+    # TODO: add clip
+    # TODO: plot.ion()
+    if input.dtype == np.uint8:
+        input = input / 255.0
+
     output = input.copy()
 
     for i in range(input.shape[0]):
 
         output[i] = anisotropic_diffusion_1d(input=input[i], niter=niter, kappa=kappa, gamma=gamma, option=option)
+
+    output = output.clip(min=0.0, max=1.0)
 
     return output
 
@@ -58,14 +68,19 @@ if __name__ == "__main__":
     img_path = "/home/chao/PycharmProjects/data/ILSVRC2012/" \
                "val_correct_adv_resnet152_pgd/n01514668/ILSVRC2012_val_00023551.JPEG"
     raw_image = load_image(img_path=img_path, normalize=False, resize=False)
-    image = anisotropic_diffusion_3d(input=raw_image, niter=7, kappa=20, option=3)
-    raw_image = np.transpose(raw_image, (1, 2, 0))
-    image = np.transpose(image, (1, 2, 0))
-    plt.figure("comparision")
-    plt.subplot(1, 2, 1)
-    plt.title("raw image")
-    plt.imshow(raw_image)
-    plt.subplot(1, 2, 2)
-    plt.title("processed image")
-    plt.imshow(image)
-    plt.show()
+    plt.ion()
+    for i in range(20):
+        image = anisotropic_diffusion_3d(input=raw_image, niter=i, kappa=50, option=1)
+        # image = anisotropic_diffusion(raw_image, niter=1, gamma=0.1, kappa=10)
+        # image = convolve(raw_image, weights=np.full((1, 3, 3), 1.0 / 9))
+        image = np.transpose(image, (1, 2, 0))
+        plt.figure(1)
+        plt.title("step = {}".format(i))
+        plt.imshow(image)
+        plt.pause(0.5)
+    plt.ioff()
+
+
+
+
+

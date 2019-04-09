@@ -13,6 +13,7 @@ from scipy.ndimage.filters import median_filter, convolve, gaussian_filter
 import getpass
 import time
 from modified_curvature_motion import modified_curvature_motion
+import warnings
 
 
 def smooth(inputs, mode="anisotropic-diffusion", param=None):
@@ -76,8 +77,11 @@ def smooth(inputs, mode="anisotropic-diffusion", param=None):
     elif mode == 'quantization':
         inputs = ((inputs * 255).astype(np.uint8) / 255.0).astype(np.float32)
 
-    else:
+    elif mode == "customized":
         pass
+    else:
+        warnings.warn("no such smoothing method")
+        quit()
 
     if is_feature:
         inputs = (torch.from_numpy(inputs)).cuda()  # convert numpy back to tensor, for features only
@@ -97,7 +101,6 @@ def forward_and_smooth(image, model, smooth_list=[], visual_list=[], mode="aniso
     :param param: parameters of the smoothing method
     :return: probability
     """
-
     if -1 in smooth_list:
         image = smooth(image, mode=mode, param=param)
 
