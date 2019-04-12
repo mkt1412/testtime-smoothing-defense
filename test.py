@@ -19,10 +19,10 @@ import argparse
 
 # Configuration on directories: must end with '/'
 if getpass.getuser() == 'fantasie':  # user is Yifei
-    DATA_DIR = '/media/fantasie/backup/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
+    DATA_DIR = '/media/fantasie/backup/data/ILSVRC2012/val_correct_adv_resnet152_FGM-0.01/'
     RESULT_DIR = 'result/'
 else:  # user is Chao
-    DATA_DIR = '/home/chao/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
+    DATA_DIR = '/home/chao/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.05-0.01-50/'
     RESULT_DIR = None
 
 # Parsing input arguments

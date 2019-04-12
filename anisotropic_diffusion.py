@@ -2,9 +2,45 @@ import numpy as np
 from util import load_image
 from matplotlib import pyplot as plt
 import warnings
-from scipy.ndimage.filters import convolve
-from medpy.filter import anisotropic_diffusion
-import time
+
+
+def gradient(input, axis=0, order=1):
+    """
+    Compute the gradient along certain axis
+    :param input: input image
+    :param axis: compute gradient along which axis
+    :param order: first order gradient or second order
+    :return:
+    """
+
+    output = input.copy()
+    if order == 1:
+        if axis == 1:
+            output[:, 0] = input[:, 1] - input[:, 0]  # left boundary uses forward difference
+            output[:, -1] = input[:, -1] - input[:, -2]  # right boundary uses backward difference
+            output[:, 1:-1] = (input[:, 2:] - input[:, :-2])/2  # interior region uses central differences
+        elif axis == 0:
+            output[0, :] = input[1, :] - input[0, :]  # upper boundary uses forward difference
+            output[-1, :] = input[-1, :] - input[-2, :]  # bottom boundary uses backward difference
+            output[1:-1, :] = (input[2:, :] - input[:-2, :]) / 2  # interior region uses central differences
+        else:
+            print("axis does not exist")
+            quit()
+
+    elif order == 2:
+        if axis == 0:
+            output[0, :] = gradient(gradient(input, axis=0), axis=0)[0, :]
+            output[-1, :] = gradient(gradient(input, axis=0), axis=0)[-1, :]
+            output[1:-1, :] = input[2:, :] - 2 * input[1:-1, :] + input[:-2, :]
+        elif axis == 1:
+            output[:, 0] = gradient(gradient(input, axis=1), axis=1)[:, 0]
+            output[:, -1] = gradient(gradient(input, axis=1), axis=1)[:, -1]
+            output[:, 1:-1] = input[:, 2:] - 2 * input[:, 1:-1] + input[:, :-2]
+        else:
+            print("axis does not exist")
+            quit()
+
+    return output
 
 
 def anisotropic_diffusion_1d(input, niter=1, kappa=50, gamma=0.1, option=1):
@@ -21,20 +57,25 @@ def anisotropic_diffusion_1d(input, niter=1, kappa=50, gamma=0.1, option=1):
 
     for i in range(niter):
 
-        Ix, Iy = np.gradient(output)
-        Ixx = np.gradient(Ix, axis=0)
-        Iyy = np.gradient(Iy, axis=1)
+        Ix = gradient(output, axis=0, order=1)
+        Iy = gradient(output, axis=1, order=1)
+        Ixx = gradient(output, axis=0, order=2)
+        Iyy = gradient(output, axis=1, order=2)
+
+        # D denotes the diffusion coefficient
         if option == 1:
-            C = 1 / (1 + (np.sqrt(Ix ** 2 + Iy ** 2) / kappa) ** 2)
+            D = 1 / (1 + (np.sqrt(Ix ** 2 + Iy ** 2) / kappa) ** 2)
         elif option == 2:
-            C = np.exp(-((np.sqrt(Ix ** 2 + Iy ** 2) / kappa) ** 2))
+            D = np.exp(-((np.sqrt(Ix ** 2 + Iy ** 2) / kappa) ** 2))
         elif option == 3:
-            C = 1 / 1 + (np.exp(np.sqrt(Ix**2 + Iy**2) - 20) * np.sqrt(Ix**2 + Iy**2)) ** 2
+            D = 1 / 1 + np.sqrt(Ix ** 2 + Iy ** 2)
         else:
             warnings.warn("no such diffusion option")
             quit()
-        Cx, Cy = np.gradient(C)
-        It = Cx * Ix + Cy * Iy + C * (Ixx + Iyy)
+
+        Dx = gradient(D, axis=0)
+        Dy = gradient(D, axis=1)
+        It = Dx * Ix + Dy * Iy + D * (Ixx + Iyy)
 
         output = output + gamma * It
 
@@ -71,17 +112,16 @@ if __name__ == "__main__":
     img_path = "/home/chao/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.05-0.01-10/n01685808/" \
                "ILSVRC2012_val_00016379.JPEG"
     raw_image = load_image(img_path=img_path, normalize=False, resize=False)
-    plt.ion()
-    for i in range(50):
-        image = anisotropic_diffusion_3d(input=raw_image, niter=i, option=1, kappa=50, gamma=0.8)
-        # image = anisotropic_diffusion(raw_image, niter=i, gamma=0.1, kappa=50)
-        # # image = convolve(raw_image, weights=np.full((1, 3, 3), 1.0 / 9))
-        image = np.transpose(image, (1, 2, 0))
-        plt.figure(1)
-        plt.title("step = {}".format(i))
-        plt.imshow(image)
-        plt.pause(0.5)
-    plt.ioff()
+    # plt.ion()
+    # for i in range(50):
+    image = anisotropic_diffusion_3d(input=raw_image, niter=15, option=1, kappa=50, gamma=0.3)
+    image = np.transpose(image, (1, 2, 0))
+    plt.figure(1)
+    # plt.title("step = {}".format(1))
+    plt.imshow(image)
+    plt.show()
+        # plt.pause(0.5)
+    # plt.ioff()
 
 
 
