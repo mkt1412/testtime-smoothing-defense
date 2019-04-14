@@ -19,7 +19,7 @@ import argparse
 
 # Configuration on directories: must end with '/'
 if getpass.getuser() == 'fantasie':  # user is Yifei
-    DATA_DIR = '/media/fantasie/backup/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
+    DATA_DIR = '/media/fantasie/backup/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002-20/'
     RESULT_DIR = 'result/'
 else:  # user is Chao
     DATA_DIR = '/home/chao/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.01-0.002/'
@@ -46,8 +46,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # %% For debugging: manual configuration
-    # args.defense = 'guassian'
-    # args.param = (3,)
+    # args.defense = 'modified-curvature-motion'
+    # args.param = (20, 0.1)
 
     print("*************************************")
     print("Target directory: %s" % args.data_dir)
@@ -120,5 +120,5 @@ if __name__ == "__main__":
 
     # Save test results for each sample (in a sorted sequence)
     if args.save and RESULT_DIR is not None:
-        result_fp = RESULT_DIR + DATA_DIR.split('/')[-2] + '_' + args.defense + '_' + str(args.param) + '.pkl'
+        result_fp = RESULT_DIR + args.data_dir.split('/')[-2] + '_' + args.defense + '_' + str(args.param) + '.pkl'
         save_array_to_pkl(confidences, result_fp)

@@ -1,6 +1,7 @@
 import numpy as np
 import torchvision.transforms as transforms
 from PIL import Image
+import matplotlib
 from matplotlib import pyplot as plt
 import os
 from glob import glob
@@ -38,11 +39,13 @@ def display_array_as_image(arr):
     :param arr: numpy array with range [0, 1] or [0, 255]
     :return: None
     """
+    matplotlib.use('TkAgg')
     if arr.shape[0] < 4:  # channel first --> channel last
         arr = np.transpose(arr, (1, 2, 0))
     if np.max(arr) < 2.0:
         arr = arr * 255.0
     plt.imshow(arr.astype(np.uint8))
+    plt.show()
 
 
 def get_paths_by_ext(directory, exts=['JPEG']):
@@ -142,7 +145,8 @@ def normalize_image_to_tensor(img):
     """
     Normalize the numpy-array image and outputs a Pytorch channel-first tensor
     :param img: float numpy array image, either (3 x h x w) or (h x w x 3)
-    :return: normalized image, pytorch tensor with shape (3 x h x w)
+    :return: normalized image, pytorch tensor with shape (3 x h x w).
+             return is not required as the preprocess takes place on the input directly
     """
     if img.shape[0] < 4:  # convert to channel-last
         img = np.transpose(img, (1, 2, 0))
@@ -351,7 +355,7 @@ def save_adversarial_examples_batch(clean_dir, params=[0.01, 0.002, 20]):
     std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
     classifier = PyTorchClassifier((0.0, 1.0), model=model, preprocessing=(mean, std),
                                    loss=torch.nn.modules.loss.CrossEntropyLoss(),
-                                   optimizer= 'hello-world', #torch.optim.Adam,  # doesn't really matter for pretrained networks
+                                   optimizer= 'hello-world',  # torch.optim.Adam,  # doesn't really matter for pretrained networks
                                    input_shape=(3, 224, 224), nb_classes=1000)
     adv_crafter = ProjectedGradientDescent(classifier,
                                            eps=params[0], eps_step=params[1], max_iter=params[2])
@@ -404,9 +408,26 @@ def summarize_categorical_results(result_path, test_dir=ADV_DIR):
     return accuracy
 
 
-if __name__ == "__main__":
+def compute_upper_bound_accuracy(result_paths):
+    """
+    Compute the upper-bound accuracy based on the results with various parameters (for iterative methods)
+    :param result_paths: list of file paths that stores results of each run. Each .pkl result file stores the prediction
+                         confidence(+)/illusiveness(-) for test samples
+    :return: upper-bound accuracy, \in [0, 1]
+    """
+    for i in range(len(result_paths)):
+        result_path = result_paths[i]
+        with open(result_path, 'rb') as f:
+            confidences = pickle.load(f)
+        if i == 0:
+            correctness = confidences > 0
+        else:
+            correctness = np.logical_or(correctness, confidences > 0)
 
-    for step in [2]:
-        save_adversarial_examples_batch(clean_dir=CORRECT_DIR, params=[0.01, 0.002, step])
-    pass
+    return np.sum(correctness) / len(correctness)
+
+
+if __name__ == "__main__":
+    result_paths = sorted(glob('result/*.pkl'))
+    print("Uppper-bound accuracy: %f" % (compute_upper_bound_accuracy(result_paths)))
 
