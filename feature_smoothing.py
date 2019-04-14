@@ -14,6 +14,7 @@ import getpass
 import time
 from modified_curvature_motion import modified_curvature_motion
 import warnings
+from anisotropic_diffusion import anisotropic_diffusion_3d
 
 
 def smooth(inputs, mode="anisotropic-diffusion", param=None):
@@ -35,9 +36,10 @@ def smooth(inputs, mode="anisotropic-diffusion", param=None):
         if is_feature:
             inputs = anisotropic_diffusion(inputs, kappa=param[1], niter=int(param[2]))
         else:
-            inputs = anisotropicDiffusion(np.transpose((inputs * 255).astype(np.uint8), (1, 2, 0)),
-                                          alpha=param[0], K=param[1], niters=int(param[2]))
-            inputs = np.transpose(inputs, (2, 0, 1)).astype("float32") / 255
+            # inputs = anisotropicDiffusion(np.transpose((inputs * 255).astype(np.uint8), (1, 2, 0)),
+            #                               alpha=param[0], K=param[1], niters=int(param[2]))
+            # inputs = np.transpose(inputs, (2, 0, 1)).astype("float32") / 255
+            inputs = anisotropic_diffusion_3d(input=inputs, niter=8, gamma=0.2, kappa=50)
     elif mode == "mean":
         param = (1, 1, 3, 3) if param is None else param
         if is_feature:
