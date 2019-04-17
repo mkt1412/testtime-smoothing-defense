@@ -2,6 +2,7 @@ import numpy as np
 from util import load_image
 from matplotlib import pyplot as plt
 import warnings
+from cv2.ximgproc import anisotropicDiffusion
 
 
 def gradient(input, axis=0, order=1):
@@ -29,12 +30,12 @@ def gradient(input, axis=0, order=1):
 
     elif order == 2:
         if axis == 0:
-            output[0, :] = gradient(gradient(input, axis=0), axis=0)[0, :]
-            output[-1, :] = gradient(gradient(input, axis=0), axis=0)[-1, :]
+            output[0, :] = input[1, :] - input[0, :] / 2
+            output[-1, :] = input[-2, :] - input[-1, :] / 2
             output[1:-1, :] = input[2:, :] - 2 * input[1:-1, :] + input[:-2, :]
         elif axis == 1:
-            output[:, 0] = gradient(gradient(input, axis=1), axis=1)[:, 0]
-            output[:, -1] = gradient(gradient(input, axis=1), axis=1)[:, -1]
+            output[:, 0] = input[:, 1] - input[:, 0] / 2
+            output[:, -1] = input[:, -2] - input[:, -1] / 2
             output[:, 1:-1] = input[:, 2:] - 2 * input[:, 1:-1] + input[:, :-2]
         else:
             print("axis does not exist")
@@ -112,16 +113,18 @@ if __name__ == "__main__":
     img_path = "/home/chao/PycharmProjects/data/ILSVRC2012/val_correct_adv_resnet152_pgd-0.05-0.01-10/n01685808/" \
                "ILSVRC2012_val_00016379.JPEG"
     raw_image = load_image(img_path=img_path, normalize=False, resize=False)
-    # plt.ion()
-    # for i in range(50):
-    image = anisotropic_diffusion_3d(input=raw_image, niter=15, option=1, kappa=50, gamma=0.3)
-    image = np.transpose(image, (1, 2, 0))
-    plt.figure(1)
-    # plt.title("step = {}".format(1))
-    plt.imshow(image)
-    plt.show()
-        # plt.pause(0.5)
-    # plt.ioff()
+    plt.ion()
+    for i in range(50):
+        image = anisotropic_diffusion_3d(input=raw_image, niter=15, option=1, kappa=50, gamma=0.1)
+    # image = anisotropicDiffusion(src=np.transpose((raw_image * 255).astype(np.uint8), (1, 2, 0)), niters=4, alpha=0.1,
+    #                              K=20)
+        image = np.transpose(image, (1, 2, 0))
+        plt.figure(1)
+        plt.title("step = {}".format(i))
+        plt.imshow(image)
+        # plt.show()
+        plt.pause(0.5)
+    plt.ioff()
 
 
 
