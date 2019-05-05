@@ -285,6 +285,10 @@ def save_array_to_pkl(arr, fp):
         pickle.dump(arr, f)
 
 
+def save_data_to_pkl(data, fp):
+    save_array_to_pkl(data, fp)
+
+
 def save_adversarial_examples(clean_dir):
     """
     Scripts to compute and save adversarial examples with foolbox
@@ -428,6 +432,6 @@ def compute_upper_bound_accuracy(result_paths):
 
 
 if __name__ == "__main__":
-    result_paths = sorted(glob('result/*.pkl'))
+    result_paths = sorted(glob('result/pgd-0.05-0.01/anisotropic-diffusion/*.pkl'))
     print("Uppper-bound accuracy: %f" % (compute_upper_bound_accuracy(result_paths)))
 
