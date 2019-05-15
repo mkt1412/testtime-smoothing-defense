@@ -184,6 +184,27 @@ def optimal_subset_test(optimal_index_path, confidence_path):
     return None
 
 
+def confidence_2_acc(confidence_path):
+    """
+    Compute acc from confidence list
+    :param confidence_path: path to confidence list
+    :return: None
+    """
+    with open(confidence_path, "rb") as f:
+        confidences = pickle.load(f)
+
+    count = 0
+
+    for confidence in confidences:
+        if confidence > 0:
+            count += 1
+    acc = count / len(confidences)
+
+    print(acc)
+
+    return None
+
+
 if __name__ == "__main__":
     # img_path = "/home/chao/PycharmProjects/data/ILSVRC2012/result/entropy/" \
     #            "val_correct_adv_resnet152_pgd-0.01-0.002-20.pkl"
@@ -206,12 +227,16 @@ if __name__ == "__main__":
     # result_fp = RESULT_DIR + 'mean' + '_' + 'pgd-0.01-0.002' + '_' + 'optimal_index' + '.pkl'
     # save_array_to_pkl(optimal_list, result_fp)
 
-    confidence_path = "/home/chao/PycharmProjects/data/ILSVRC2012/result/optimal_subset/pgd-0.05-0.01/" \
-                      "anisotropic-diffusion/" \
-                      "val_correct_adv_resnet152_pgd-0.05-0.01_anisotropic-diffusion_[0.1, 20.0, 7.0].pkl"
-    optimal_index_path = "/home/chao/PycharmProjects/data/ILSVRC2012/result/optimal_subset/pgd-0.05-0.01/mean/" \
-                         "mean_pgd-0.05-0.01_optimal_index.pkl"
-    optimal_subset_test(optimal_index_path=optimal_index_path, confidence_path=confidence_path)
+    # confidence_path = "/home/chao/PycharmProjects/data/ILSVRC2012/result/optimal_subset/pgd-0.05-0.01/" \
+    #                   "anisotropic-diffusion/" \
+    #                   "val_correct_adv_resnet152_pgd-0.05-0.01_anisotropic-diffusion_[0.1, 20.0, 7.0].pkl"
+    # optimal_index_path = "/home/chao/PycharmProjects/data/ILSVRC2012/result/optimal_subset/pgd-0.05-0.01/mean/" \
+    #                      "mean_pgd-0.05-0.01_optimal_index.pkl"
+    # optimal_subset_test(optimal_index_path=optimal_index_path, confidence_path=confidence_path)
+
+    confidence_path = "/home/chao/PycharmProjects/data/ILSVRC2012/result/confidence_adv/pgd-0.05-0.01/" \
+                      "mean/val_correct_adv_resnet152_pgd-0.05-0.01_mean_[1.0, 1.0, 10.0, 10.0].pkl"
+    confidence_2_acc(confidence_path=confidence_path)
 
 
 
